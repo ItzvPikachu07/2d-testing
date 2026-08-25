@@ -9,6 +9,7 @@ public class PlayerMovement : MonoBehaviour
     public int attackDamage = 25;
     public float attackRange = 1.8f;
     public float attackCooldown = 0.6f;
+    public LayerMask enemyLayers; // Assign "Enemy" layer in Inspector
 
     public bool isBlocking = false;
 
@@ -19,6 +20,7 @@ public class PlayerMovement : MonoBehaviour
 
     private Rigidbody2D rb;
     private SpriteRenderer sr;
+    private Animator anim;
     private float moveInput;
     private float nextAttackTime;
     private int maxHealth;
@@ -27,6 +29,7 @@ public class PlayerMovement : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         sr = GetComponent<SpriteRenderer>();
+        anim = GetComponent<Animator>();
 
         maxHealth = health;
         if (healthSlider != null)
@@ -50,19 +53,17 @@ public class PlayerMovement : MonoBehaviour
 
         isBlocking = Mouse.current.rightButton.isPressed;
 
+        // Handles blocking tint vs natural sprite colors (red attack tint removed)
         if (isBlocking)
         {
             sr.color = Color.blue;
-        }
-        else if (Time.time < nextAttackTime - (attackCooldown - 0.15f))
-        {
-            sr.color = Color.red;
         }
         else
         {
             sr.color = Color.white;
         }
 
+        // Left Click triggers Attack
         if (Mouse.current.leftButton.wasPressedThisFrame && Time.time >= nextAttackTime && !isBlocking)
         {
             Attack();
@@ -84,19 +85,23 @@ public class PlayerMovement : MonoBehaviour
 
     void Attack()
     {
-        sr.color = Color.red;
+        // 1. Play swing animation
+        if (anim != null)
+        {
+            anim.SetTrigger("Attack");
+        }
 
-        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, attackRange);
+        // 2. Perform attack damage calculation using LayerMask
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, attackRange, enemyLayers);
 
         foreach (Collider2D hit in hits)
         {
             if (hit.gameObject == gameObject) continue;
 
-            AIPlayerMovement enemy = hit.GetComponent<AIPlayerMovement>();
+            AIPlayerMovement enemy = hit.GetComponentInParent<AIPlayerMovement>();
 
             if (enemy != null)
             {
-                // CRITICAL: Pass 'this' so the AI knows who attacked it
                 enemy.TakeDamage(attackDamage, this);
             }
         }

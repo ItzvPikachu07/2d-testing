@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,7 +8,9 @@ public class AIPlayerMovement : MonoBehaviour
     public float moveSpeed = 5.5f;
     public float attackRange = 1.8f;
     public int damage = 25;
-    public float attackCooldown = 0.5f;
+    public float attackCooldown = 0.8f;
+    public float damageDelay = 0.15f;
+    public float animationLength = 0.5f; // Set to your exact attack clip length
     public int health = 100;
 
     [Header("UI Setup")]
@@ -17,8 +20,10 @@ public class AIPlayerMovement : MonoBehaviour
 
     private Rigidbody2D rb;
     private SpriteRenderer sr;
+    private Animator anim;
     private float attackTimer;
     private bool isBlocking;
+    private bool isAttacking;
 
     private float blockDecisionTimer;
     private float blockDecisionCooldown = 0.6f;
@@ -28,6 +33,7 @@ public class AIPlayerMovement : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         sr = GetComponent<SpriteRenderer>();
+        anim = GetComponent<Animator>();
 
         maxHealth = health;
         if (healthSlider != null)
@@ -42,6 +48,12 @@ public class AIPlayerMovement : MonoBehaviour
     void FixedUpdate()
     {
         if (player == null) return;
+
+        if (isAttacking)
+        {
+            rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+            return;
+        }
 
         float distance = Vector2.Distance(transform.position, player.position);
         PlayerMovement playerScript = player.GetComponent<PlayerMovement>();
@@ -81,16 +93,41 @@ public class AIPlayerMovement : MonoBehaviour
 
             if (!isBlocking && Time.time >= attackTimer)
             {
-                sr.color = Color.red;
-
-                if (playerScript != null)
-                {
-                    playerScript.TakeDamage(damage);
-                }
-
-                attackTimer = Time.time + attackCooldown + Random.Range(0.1f, 0.4f);
+                StartCoroutine(PerformAttack(playerScript));
+                attackTimer = Time.time + attackCooldown + animationLength;
             }
         }
+    }
+
+    private IEnumerator PerformAttack(PlayerMovement playerScript)
+    {
+        isAttacking = true;
+
+        // Force an immediate transition into AI_Attack over 0.01 seconds
+        if (anim != null)
+        {
+            anim.CrossFadeInFixedTime("AI_Attack", 0.01f);
+        }
+
+        // Wait for visual impact frame
+        yield return new WaitForSeconds(damageDelay);
+
+        if (player != null && playerScript != null && Vector2.Distance(transform.position, player.position) <= attackRange + 0.5f)
+        {
+            playerScript.TakeDamage(damage);
+        }
+
+        // Wait out remaining animation duration
+        float remainingTime = Mathf.Max(0.05f, animationLength - damageDelay);
+        yield return new WaitForSeconds(remainingTime);
+
+        // Force return to idle state
+        if (anim != null)
+        {
+            anim.CrossFadeInFixedTime("ai", 0.01f);
+        }
+
+        isAttacking = false;
     }
 
     public void TakeDamage(int incomingDamage, PlayerMovement playerScript)
@@ -99,7 +136,7 @@ public class AIPlayerMovement : MonoBehaviour
         {
             if (playerScript != null)
             {
-                playerScript.TakeDamage(15); // Counter-damage
+                playerScript.TakeDamage(15);
             }
             incomingDamage = (int)(incomingDamage * 0.15f);
         }
@@ -109,7 +146,7 @@ public class AIPlayerMovement : MonoBehaviour
         if (healthSlider != null)
         {
             healthSlider.value = health;
-            UpdateHealthBarColor(); // Updates AI bar size & color
+            UpdateHealthBarColor();
         }
 
         if (health <= 0)

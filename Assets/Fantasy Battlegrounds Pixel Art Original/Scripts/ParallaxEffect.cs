@@ -18,10 +18,48 @@ namespace FantasyBattlegroundsPixelArtOriginal
 
         private void Start()
         {
-            mainCamera = Camera.main.transform;
-            cameraSize = Camera.main.orthographicSize;
-            player = GameObject.FindWithTag("Player").GetComponent<Transform>();
-            spriteWidth = GetComponent<SpriteRenderer>().bounds.size.x / 3;
+            // SAFE CAMERA LOOKUP: Try Camera.main first, fallback to FindFirstObjectByType
+            Camera cam = Camera.main;
+            if (cam == null)
+            {
+                cam = FindFirstObjectByType<Camera>();
+            }
+
+            if (cam != null)
+            {
+                mainCamera = cam.transform;
+                cameraSize = cam.orthographicSize;
+            }
+            else
+            {
+                Debug.LogError("ParallaxEffect: No Camera found in scene!");
+                return;
+            }
+
+            // SAFE PLAYER LOOKUP: Try tag "Player" first, fallback to finding PlayerMovement script
+            GameObject playerObj = GameObject.FindWithTag("Player");
+            if (playerObj == null)
+            {
+                PlayerMovement pm = FindFirstObjectByType<PlayerMovement>();
+                if (pm != null) playerObj = pm.gameObject;
+            }
+
+            if (playerObj != null)
+            {
+                player = playerObj.transform;
+            }
+            else
+            {
+                Debug.LogError("ParallaxEffect: No Player found in scene!");
+                return;
+            }
+
+            // SAFE SPRITE RENDERER CHECK
+            SpriteRenderer sr = GetComponent<SpriteRenderer>();
+            if (sr != null)
+            {
+                spriteWidth = sr.bounds.size.x / 3;
+            }
 
             transform.position = new Vector2(mainCamera.position.x, player.position.y - 1f);
             initialPos = transform.position;
@@ -29,6 +67,9 @@ namespace FantasyBattlegroundsPixelArtOriginal
 
         private void LateUpdate()
         {
+            // Don't execute movement if references are missing
+            if (mainCamera == null || player == null) return;
+
             translationOffset += independantSpeed * Time.deltaTime * parallaxIntensityX;
 
             float parallaxOffsetX = (mainCamera.position.x * (1 - (parallaxIntensityX / 2))) + translationOffset;
@@ -45,4 +86,3 @@ namespace FantasyBattlegroundsPixelArtOriginal
         }
     }
 }
-

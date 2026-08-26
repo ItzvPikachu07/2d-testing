@@ -8,9 +8,9 @@ public class AIPlayerMovement : MonoBehaviour
     public float moveSpeed = 5.5f;
     public float attackRange = 1.8f;
     public int damage = 25;
-    public float attackCooldown = 0.8f;
-    public float damageDelay = 0.15f;
-    public float animationLength = 0.5f; // Set to your exact attack clip length
+    public float attackCooldown = 0.6f;
+    public float damageDelay = 0.2f;
+    public float animationLength = 0.517f;
     public int health = 100;
 
     [Header("UI Setup")]
@@ -28,6 +28,8 @@ public class AIPlayerMovement : MonoBehaviour
     private float blockDecisionTimer;
     private float blockDecisionCooldown = 0.6f;
     private int maxHealth;
+
+    private string currentState = "";
 
     void Start()
     {
@@ -49,6 +51,7 @@ public class AIPlayerMovement : MonoBehaviour
     {
         if (player == null) return;
 
+        // HARD LOCK: Stop movement completely while attacking
         if (isAttacking)
         {
             rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
@@ -58,6 +61,7 @@ public class AIPlayerMovement : MonoBehaviour
         float distance = Vector2.Distance(transform.position, player.position);
         PlayerMovement playerScript = player.GetComponent<PlayerMovement>();
 
+        // Handle defensive decision timing
         if (Time.time >= blockDecisionTimer)
         {
             if (playerScript != null && distance < attackRange + 0.8f)
@@ -76,25 +80,38 @@ public class AIPlayerMovement : MonoBehaviour
         {
             sr.color = Color.blue;
             rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+            ChangeAnimationState("ai");
+            return;
         }
         else
         {
             sr.color = Color.white;
         }
 
-        if (distance > attackRange && !isBlocking)
+        // Only move IF completely out of attack range AND not currently attacking
+        if (distance > attackRange)
         {
             float direction = player.position.x > transform.position.x ? 1f : -1f;
             rb.linearVelocity = new Vector2(direction * moveSpeed, rb.linearVelocity.y);
+
+            // Inverted sprite flip logic
+            sr.flipX = direction > 0;
+
+            ChangeAnimationState("AI_Walk");
         }
-        else if (distance <= attackRange)
+        else
         {
+            // Full stop when inside attack range
             rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
 
-            if (!isBlocking && Time.time >= attackTimer)
+            if (Time.time >= attackTimer)
             {
                 StartCoroutine(PerformAttack(playerScript));
                 attackTimer = Time.time + attackCooldown + animationLength;
+            }
+            else
+            {
+                ChangeAnimationState("ai");
             }
         }
     }
@@ -103,13 +120,17 @@ public class AIPlayerMovement : MonoBehaviour
     {
         isAttacking = true;
 
-        // Force an immediate transition into AI_Attack over 0.01 seconds
+        // Zero out velocity instantly so momentum doesn't slide him into you
+        rb.linearVelocity = new Vector2(0, rb.linearVelocity.y);
+
         if (anim != null)
         {
-            anim.CrossFadeInFixedTime("AI_Attack", 0.01f);
+            anim.speed = 1.0f;
         }
 
-        // Wait for visual impact frame
+        ChangeAnimationState("AI_Attack", true);
+
+        // Wait for impact frame
         yield return new WaitForSeconds(damageDelay);
 
         if (player != null && playerScript != null && Vector2.Distance(transform.position, player.position) <= attackRange + 0.5f)
@@ -121,13 +142,18 @@ public class AIPlayerMovement : MonoBehaviour
         float remainingTime = Mathf.Max(0.05f, animationLength - damageDelay);
         yield return new WaitForSeconds(remainingTime);
 
-        // Force return to idle state
-        if (anim != null)
-        {
-            anim.CrossFadeInFixedTime("ai", 0.01f);
-        }
+        ChangeAnimationState("ai", true);
 
         isAttacking = false;
+    }
+
+    private void ChangeAnimationState(string newState, bool forceRestart = false)
+    {
+        if (anim == null) return;
+        if (currentState == newState && !forceRestart) return;
+
+        anim.CrossFadeInFixedTime(newState, 0.05f);
+        currentState = newState;
     }
 
     public void TakeDamage(int incomingDamage, PlayerMovement playerScript)
